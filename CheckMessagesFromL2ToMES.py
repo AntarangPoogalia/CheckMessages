@@ -9,31 +9,29 @@ import oracledb
 
 # Initialize thick mode for older Oracle database compatibility
 try:
-    # Check if we're running in GitHub Actions
+    # Check if we're in GitHub Actions
     if 'GITHUB_ACTIONS' in os.environ:
-        # GitHub Actions environment - use explicit path
+        # GitHub Actions environment - use explicit Oracle Client path
         lib_dir = "/opt/oracle/instantclient_19_23"
-        if os.path.exists(lib_dir):
-            oracledb.init_oracle_client(lib_dir=lib_dir)
-            print(f"✅ Oracle thick mode initialized for GitHub Actions: {lib_dir}")
-        else:
-            print(f"⚠️  Oracle Client directory not found: {lib_dir}")
-            raise Exception(f"Oracle Client not found at {lib_dir}")
+        print(f"GitHub Actions detected - initializing Oracle Client: {lib_dir}")
+        oracledb.init_oracle_client(lib_dir=lib_dir)
+        print("✅ Oracle thick mode initialized for GitHub Actions")
     else:
         # Local development environment
         oracledb.init_oracle_client()
         print("✅ Oracle thick mode initialized for local environment")
-        
 except Exception as e:
     print(f"⚠️  Warning: Could not initialize thick mode: {e}")
     print("Continuing with thin mode (may not work with older Oracle versions)")
 
-# Load environment variables for local development
-try:
-    from dotenv import load_dotenv
-    load_dotenv() 
-except ImportError:
-    pass  
+# Load .env only for local development
+if 'GITHUB_ACTIONS' not in os.environ:
+    try:
+        from dotenv import load_dotenv
+        load_dotenv() 
+        print("✅ Loaded .env file for local development")
+    except ImportError:
+        pass  
 
 
 def set_output(name: str, value: str) -> None:
@@ -93,16 +91,14 @@ This is an automated alert from the CheckMessagesFromL2ToMES monitoring script.
 
 
 def main() -> int:
-    # Debug environment variables
     print(f"Environment: {'GitHub Actions' if 'GITHUB_ACTIONS' in os.environ else 'Local Development'}")
-    print(f"THRESHOLD_VALUE env var: '{os.environ.get('THRESHOLD_VALUE', 'NOT_SET')}'")
     
-    # Database connection
+    # Database connection with better error handling
     user = os.environ.get("ORACLE_USER")
     password = os.environ.get("ORACLE_PASSWORD")
     dsn = os.environ.get("ORACLE_DSN")
     
-    # Handle threshold value more carefully
+    # Handle threshold value safely
     threshold_str = os.environ.get("THRESHOLD_VALUE", "100").strip()
     if not threshold_str:
         print("⚠️  THRESHOLD_VALUE is empty, using default value of 100")
@@ -111,20 +107,20 @@ def main() -> int:
         try:
             threshold = int(threshold_str)
         except ValueError:
-            print(f"⚠️  THRESHOLD_VALUE '{threshold_str}' is not a valid integer, using default value of 100")
+            print(f"⚠️  THRESHOLD_VALUE '{threshold_str}' is not valid, using default value of 100")
             threshold = 100
     
     # Validate required environment variables
-    if not user or not password or not dsn:
+    if not all([user, password, dsn]):
         missing = []
         if not user: missing.append("ORACLE_USER")
-        if not password: missing.append("ORACLE_PASSWORD") 
+        if not password: missing.append("ORACLE_PASSWORD")
         if not dsn: missing.append("ORACLE_DSN")
         print(f"ERROR: Missing required environment variables: {', '.join(missing)}")
         return 1
     
     # Message monitoring configuration
-    message_status = os.environ.get("MESSAGE_STATUS", "0")  # Default to "0" instead of "ERROR"
+    message_status = os.environ.get("MESSAGE_STATUS", "0")  # Default to "0"
     table_name = os.environ.get("MESSAGE_TABLE", "L2_TO_MES_MESSAGES")
     
     metric_name = f"L2_TO_MES_MESSAGES_STATUS_{message_status}_LAST_15_MIN"
@@ -168,7 +164,7 @@ def main() -> int:
         set_output("utc_time", utc_time)
         set_output("email_sent", "true" if email_sent else "false")
 
-        print(f"{metric_name}={metric_value}, threshold={threshold}, alert={alert}, email_sent={email_sent}")
+        print(f"Final: {metric_name}={metric_value}, threshold={threshold}, alert={alert}, email_sent={email_sent}")
         return 0
 
     except Exception as e:
@@ -195,6 +191,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
-
