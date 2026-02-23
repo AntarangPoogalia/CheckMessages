@@ -86,7 +86,6 @@ def main() -> int:
     
     # Message monitoring configuration
     message_status = os.environ.get("MESSAGE_STATUS", "ERROR")  # Status to monitor
-    table_name = os.environ.get("MESSAGE_TABLE", "L2_TO_MES_MESSAGES")  # Table name
     
     metric_name = f"L2_TO_MES_MESSAGES_STATUS_{message_status}_LAST_15_MIN"
 
@@ -150,5 +149,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
