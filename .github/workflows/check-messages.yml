@@ -47,6 +47,19 @@ jobs:
           echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
           echo "=== Library Dependencies ==="
           ldd /opt/oracle/instantclient_19_23/libclntsh.so.19.1 | head -10
+      
+      - name: Debug environment variables
+        run: |
+          echo "=== Checking for required variables ==="
+          [ -z "$ORACLE_USER" ] && echo "❌ ORACLE_USER is empty" || echo "✅ ORACLE_USER is set"
+          [ -z "$ORACLE_PASSWORD" ] && echo "❌ ORACLE_PASSWORD is empty" || echo "✅ ORACLE_PASSWORD is set"
+          [ -z "$ORACLE_DSN" ] && echo "❌ ORACLE_DSN is empty" || echo "✅ ORACLE_DSN is set"
+          [ -z "$SMTP_SERVER" ] && echo "❌ SMTP_SERVER is empty" || echo "✅ SMTP_SERVER is set"
+        env:
+          ORACLE_USER: ${{ secrets.ORACLE_USER }}
+          ORACLE_PASSWORD: ${{ secrets.ORACLE_PASSWORD }}
+          ORACLE_DSN: ${{ secrets.ORACLE_DSN }}
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
           
       - name: Run message check
         id: check
@@ -73,4 +86,3 @@ jobs:
           echo "Metric: ${{ steps.check.outputs.metric_name }}"
           echo "Value: ${{ steps.check.outputs.metric_value }}"
           echo "Threshold: ${{ steps.check.outputs.threshold }}"
-
