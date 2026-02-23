@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import smtplib
 from datetime import datetime, timezone
@@ -9,19 +9,49 @@ import oracledb
 
 # Initialize thick mode for older Oracle database compatibility
 try:
-    oracledb.init_oracle_client()
+    # Check if we're running in GitHub Actions (Linux environment)
+    if 'GITHUB_ACTIONS' in os.environ:
+        # GitHub Actions environment - try to use Oracle Instant Client
+        oracle_lib_paths = [
+            "/opt/oracle/instantclient_19_23",
+            "/usr/lib/oracle/instantclient_19_23", 
+            "/usr/local/oracle/instantclient_19_23"
+        ]
+        
+        initialized = False
+        for lib_path in oracle_lib_paths:
+            if os.path.exists(lib_path):
+                try:
+                    oracledb.init_oracle_client(lib_dir=lib_path)
+                    print(f"✅ Oracle thick mode initialized for GitHub Actions: {lib_path}")
+                    initialized = True
+                    break
+                except Exception as e:
+                    print(f"Failed to init with {lib_path}: {e}")
+        
+        if not initialized:
+            print("⚠️  Oracle Instant Client not found, trying thin mode")
+    else:
+        # Local development environment
+        oracledb.init_oracle_client()
+        print("✅ Oracle thick mode initialized for local environment")
+        
 except Exception as e:
     print(f"⚠️  Warning: Could not initialize thick mode: {e}")
     print("Continuing with thin mode (may not work with older Oracle versions)")
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv() 
-except ImportError:
-    pass  
+# Load environment variables for local development only
+if 'GITHUB_ACTIONS' not in os.environ:
+    try:
+        from dotenv import load_dotenv
+        load_dotenv() 
+        print("✅ Loaded .env file for local development")
+    except ImportError:
+        print("⚠️  python-dotenv not available, using system environment variables")
 
 
 def set_output(name: str, value: str) -> None:
+    """Set GitHub Actions output variables"""
     path = os.environ.get("GITHUB_OUTPUT")
     if not path:
         return
@@ -78,6 +108,7 @@ This is an automated alert from the CheckMessagesFromL2ToMES monitoring script.
 
 
 def main() -> int:
+    """Main function to check database and send alerts"""
     # Database connection
     user = os.environ["ORACLE_USER"]
     password = os.environ["ORACLE_PASSWORD"]
@@ -90,7 +121,7 @@ def main() -> int:
     
     metric_name = f"L2_TO_MES_MESSAGES_STATUS_{message_status}_LAST_15_MIN"
 
-    # SQL query to count messages with specific status in last 15 minutes
+    # SQL query to count messages with specific status in last 10 minutes
     sql = """
     select count(*) 
     from mes_send
@@ -99,7 +130,9 @@ def main() -> int:
     """
 
     try:
+        print(f"Environment: {'GitHub Actions' if 'GITHUB_ACTIONS' in os.environ else 'Local Development'}")
         print(f"Connecting to Oracle database: {dsn} as {user}")
+        
         with oracledb.connect(user=user, password=password, dsn=dsn) as conn:
             print(f"✅ Connected successfully! Database version: {conn.version}")
             with conn.cursor() as cur:
@@ -110,10 +143,16 @@ def main() -> int:
         utc_time = datetime.now(timezone.utc).isoformat()
         alert = metric_value >= threshold
         email_sent = False
-        print(f"messages currently on status 0: {metric_value}")
+        
+        print(f"Messages currently on status 0: {metric_value}")
+        print(f"Threshold: {threshold}")
+        print(f"Alert triggered: {alert}")
+        
         # Send email if threshold exceeded
         if alert:
             email_sent = send_email_alert(metric_name, metric_value, threshold, utc_time)
+        else:
+            print("No alert needed - message count is below threshold")
 
         # Set GitHub Actions outputs
         set_output("alert", "true" if alert else "false")
@@ -123,7 +162,7 @@ def main() -> int:
         set_output("utc_time", utc_time)
         set_output("email_sent", "true" if email_sent else "false")
 
-        print(f"{metric_name}={metric_value}, threshold={threshold}, alert={alert}, email_sent={email_sent}")
+        print(f"Final status: {metric_name}={metric_value}, threshold={threshold}, alert={alert}, email_sent={email_sent}")
         return 0
 
     except Exception as e:
@@ -150,5 +189,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
