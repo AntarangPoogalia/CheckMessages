@@ -9,29 +9,16 @@ import oracledb
 
 # Initialize thick mode for older Oracle database compatibility
 try:
-    # Check if we're in GitHub Actions
-    if 'GITHUB_ACTIONS' in os.environ:
-        # GitHub Actions environment - use explicit Oracle Client path
-        lib_dir = "/opt/oracle/instantclient_19_23"
-        print(f"GitHub Actions detected - initializing Oracle Client: {lib_dir}")
-        oracledb.init_oracle_client(lib_dir=lib_dir)
-        print("✅ Oracle thick mode initialized for GitHub Actions")
-    else:
-        # Local development environment
-        oracledb.init_oracle_client()
-        print("✅ Oracle thick mode initialized for local environment")
+    oracledb.init_oracle_client()
 except Exception as e:
     print(f"⚠️  Warning: Could not initialize thick mode: {e}")
     print("Continuing with thin mode (may not work with older Oracle versions)")
 
-# Load .env only for local development
-if 'GITHUB_ACTIONS' not in os.environ:
-    try:
-        from dotenv import load_dotenv
-        load_dotenv() 
-        print("✅ Loaded .env file for local development")
-    except ImportError:
-        pass  
+try:
+    from dotenv import load_dotenv
+    load_dotenv() 
+except ImportError:
+    pass  
 
 
 def set_output(name: str, value: str) -> None:
@@ -46,12 +33,12 @@ def send_email_alert(metric_name: str, metric_value: int, threshold: int, utc_ti
     """Send email alert when threshold is exceeded"""
     try:
         # Email configuration from environment variables
-        smtp_server = os.environ["SMTP_SERVER"]
+        smtp_server = os.environ.get("SMTP_SERVER")
         smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-        smtp_user = os.environ["SMTP_USER"]
-        smtp_password = os.environ["SMTP_PASSWORD"]
-        from_email = os.environ["FROM_EMAIL"]
-        to_emails = os.environ["TO_EMAILS"].split(",")  # Comma-separated list
+        smtp_user = os.environ.get("SMTP_USER")
+        smtp_password = os.environ.get("SMTP_PASSWORD")
+        from_email = os.environ.get("FROM_EMAIL")
+        to_emails = os.environ.get("TO_EMAILS").split(",")  # Comma-separated list
         
         # Create message
         msg = MIMEMultipart()
@@ -91,41 +78,19 @@ This is an automated alert from the CheckMessagesFromL2ToMES monitoring script.
 
 
 def main() -> int:
-    print(f"Environment: {'GitHub Actions' if 'GITHUB_ACTIONS' in os.environ else 'Local Development'}")
-    
-    # Database connection with better error handling
-    user = os.environ.get("ORACLE_USER")
-    password = os.environ.get("ORACLE_PASSWORD")
-    dsn = os.environ.get("ORACLE_DSN")
-    
-    # Handle threshold value safely
-    threshold_str = os.environ.get("THRESHOLD_VALUE", "100").strip()
-    if not threshold_str:
-        print("⚠️  THRESHOLD_VALUE is empty, using default value of 100")
-        threshold = 100
-    else:
-        try:
-            threshold = int(threshold_str)
-        except ValueError:
-            print(f"⚠️  THRESHOLD_VALUE '{threshold_str}' is not valid, using default value of 100")
-            threshold = 100
-    
-    # Validate required environment variables
-    if not all([user, password, dsn]):
-        missing = []
-        if not user: missing.append("ORACLE_USER")
-        if not password: missing.append("ORACLE_PASSWORD")
-        if not dsn: missing.append("ORACLE_DSN")
-        print(f"ERROR: Missing required environment variables: {', '.join(missing)}")
-        return 1
+    # Database connection
+    user = os.environ["ORACLE_USER"]
+    password = os.environ["ORACLE_PASSWORD"]
+    dsn = os.environ["ORACLE_DSN"]
+    threshold = int(os.environ.get("THRESHOLD_VALUE", "100"))
     
     # Message monitoring configuration
-    message_status = os.environ.get("MESSAGE_STATUS", "0")  # Default to "0"
-    table_name = os.environ.get("MESSAGE_TABLE", "L2_TO_MES_MESSAGES")
+    message_status = os.environ.get("MESSAGE_STATUS", "ERROR")  # Status to monitor
+    table_name = os.environ.get("MESSAGE_TABLE", "L2_TO_MES_MESSAGES")  # Table name
     
     metric_name = f"L2_TO_MES_MESSAGES_STATUS_{message_status}_LAST_15_MIN"
 
-    # SQL query to count messages with specific status in last 10 minutes
+    # SQL query to count messages with specific status in last 15 minutes
     sql = """
     select count(*) 
     from mes_send
@@ -145,16 +110,10 @@ def main() -> int:
         utc_time = datetime.now(timezone.utc).isoformat()
         alert = metric_value >= threshold
         email_sent = False
-        
-        print(f"Messages currently on status 0: {metric_value}")
-        print(f"Threshold: {threshold}")
-        print(f"Alert triggered: {alert}")
-        
+        print(f"messages currently on status 0: {metric_value}")
         # Send email if threshold exceeded
         if alert:
             email_sent = send_email_alert(metric_name, metric_value, threshold, utc_time)
-        else:
-            print("No alert needed - message count is below threshold")
 
         # Set GitHub Actions outputs
         set_output("alert", "true" if alert else "false")
@@ -164,7 +123,7 @@ def main() -> int:
         set_output("utc_time", utc_time)
         set_output("email_sent", "true" if email_sent else "false")
 
-        print(f"Final: {metric_name}={metric_value}, threshold={threshold}, alert={alert}, email_sent={email_sent}")
+        print(f"{metric_name}={metric_value}, threshold={threshold}, alert={alert}, email_sent={email_sent}")
         return 0
 
     except Exception as e:
@@ -191,3 +150,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
