@@ -18,9 +18,14 @@ jobs:
         with:
           python-version: '3.11'
       
+      - name: Install system dependencies for Oracle
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libaio1 libaio-dev unzip wget
+          
       - name: Install Oracle Instant Client
         run: |
-          # Download and install Oracle Instant Client for thick mode
+          # Download and install Oracle Instant Client for Ubuntu
           wget https://download.oracle.com/otn_software/linux/instantclient/1923000/instantclient-basic-linux.x64-19.23.0.0.0dbru.zip
           unzip instantclient-basic-linux.x64-19.23.0.0.0dbru.zip
           sudo mkdir -p /opt/oracle
@@ -31,9 +36,16 @@ jobs:
       
       - name: Install Python dependencies
         run: |
-          pip install oracledb
+          pip install oracledb python-dotenv
       
+      - name: Verify Oracle Client Installation
+        run: |
+          ls -la /opt/oracle/instantclient_19_23/
+          echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+          ldd /opt/oracle/instantclient_19_23/libclntsh.so.19.1 || echo "Library check failed"
+          
       - name: Run message check
+        id: check
         run: python CheckMessagesFromL2ToMES.py
         env:
           ORACLE_USER: ${{ secrets.ORACLE_USER }}
@@ -50,8 +62,11 @@ jobs:
           TO_EMAILS: ${{ secrets.TO_EMAILS }}
 
       - name: Show results
+        if: always()
         run: |
-          echo "Alert triggered: ${{ steps.check.outputs.alert }}"
+          echo "Check completed!"
+          echo "Alert: ${{ steps.check.outputs.alert }}"
           echo "Metric: ${{ steps.check.outputs.metric_name }}"
           echo "Value: ${{ steps.check.outputs.metric_value }}"
           echo "Threshold: ${{ steps.check.outputs.threshold }}"
+
