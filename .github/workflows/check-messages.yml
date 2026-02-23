@@ -7,7 +7,7 @@ on:
 
 jobs:
   check-messages:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04  # Use Ubuntu 22.04 instead of latest (24.04)
     
     steps:
       - name: Checkout code
@@ -21,15 +21,12 @@ jobs:
       - name: Install system dependencies for Oracle
         run: |
           sudo apt-get update
-          # Install required dependencies for Oracle Client on Ubuntu 24.04
-          sudo apt-get install -y libaio-dev unzip wget curl
-          # For Ubuntu 24.04, we need to install libaio1 from a different source or use alternative
-          wget http://archive.ubuntu.com/ubuntu/pool/main/liba/libaio/libaio1_0.3.113-4_amd64.deb
-          sudo dpkg -i libaio1_0.3.113-4_amd64.deb || sudo apt-get install -f -y
+          # Install required dependencies - libaio1 is available on Ubuntu 22.04
+          sudo apt-get install -y libaio1 libaio-dev unzip wget curl
           
       - name: Install Oracle Instant Client
         run: |
-          # Download and install Oracle Instant Client for Ubuntu
+          # Download and install Oracle Instant Client
           wget https://download.oracle.com/otn_software/linux/instantclient/1923000/instantclient-basic-linux.x64-19.23.0.0.0dbru.zip
           unzip instantclient-basic-linux.x64-19.23.0.0.0dbru.zip
           sudo mkdir -p /opt/oracle
@@ -44,13 +41,12 @@ jobs:
       
       - name: Verify Oracle Client Installation
         run: |
-          echo "=== Oracle Client Installation Check ==="
-          ls -la /opt/oracle/instantclient_19_23/ || echo "Directory not found"
+          echo "=== Oracle Client Files ==="
+          ls -la /opt/oracle/instantclient_19_23/
+          echo "=== Environment ==="
           echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
-          echo "=== Library Dependencies Check ==="
-          ldd /opt/oracle/instantclient_19_23/libclntsh.so.19.1 || echo "Library dependency check failed"
-          echo "=== libaio Check ==="
-          ldconfig -p | grep libaio || echo "libaio not found in ldconfig"
+          echo "=== Library Dependencies ==="
+          ldd /opt/oracle/instantclient_19_23/libclntsh.so.19.1 | head -10
           
       - name: Run message check
         id: check
@@ -77,5 +73,4 @@ jobs:
           echo "Metric: ${{ steps.check.outputs.metric_name }}"
           echo "Value: ${{ steps.check.outputs.metric_value }}"
           echo "Threshold: ${{ steps.check.outputs.threshold }}"
-
 
